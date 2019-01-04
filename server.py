@@ -1,6 +1,14 @@
 import os
 import json
 from bottle import get, run, response, error
+from lib.sensor import Sensor
+
+sensor = Sensor()
+
+@get('/env')
+def env():
+    t, h, p = sensor.fetch()
+    return { 'temp': t, 'humidity': h, 'pressure': p }
 
 @error(404)
 def error404(error):
