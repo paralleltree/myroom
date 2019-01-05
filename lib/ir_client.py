@@ -24,37 +24,43 @@ class IRClient:
     @classmethod
     def send(cls, code, pin, freq):
         pi = pigpio.pi() # Connect to Pi.
-        pi.set_mode(pin, pigpio.OUTPUT) # IR TX connected to this GPIO.
-        pi.wave_add_new()
 
-        marks_wid = {}
-        spaces_wid = {}
+        if not pi.connected:
+            raise RuntimeError('cannot connect to gpio')
 
-        wave = [0] * len(code)
+        try:
+            pi.set_mode(pin, pigpio.OUTPUT) # IR TX connected to this GPIO.
+            pi.wave_add_new()
 
-        for i in range(0, len(code)):
-            ci = code[i]
-            if i & 1: # Space
-                if ci not in spaces_wid:
-                    pi.wave_add_generic([pigpio.pulse(0, 0, ci)])
-                    spaces_wid[ci] = pi.wave_create()
-                wave[i] = spaces_wid[ci]
-            else: # Mark
-                if ci not in marks_wid:
-                    wf = cls.carrier(pin, freq, ci)
-                    pi.wave_add_generic(wf)
-                    marks_wid[ci] = pi.wave_create()
-                wave[i] = marks_wid[ci]
+            marks_wid = {}
+            spaces_wid = {}
 
-        pi.wave_chain(wave)
+            wave = [0] * len(code)
 
-        while pi.wave_tx_busy():
-            time.sleep(0.002)
+            for i in range(0, len(code)):
+                ci = code[i]
+                if i & 1: # Space
+                    if ci not in spaces_wid:
+                        pi.wave_add_generic([pigpio.pulse(0, 0, ci)])
+                        spaces_wid[ci] = pi.wave_create()
+                    wave[i] = spaces_wid[ci]
+                else: # Mark
+                    if ci not in marks_wid:
+                        wf = cls.carrier(pin, freq, ci)
+                        pi.wave_add_generic(wf)
+                        marks_wid[ci] = pi.wave_create()
+                    wave[i] = marks_wid[ci]
 
-        for i in marks_wid:
-            pi.wave_delete(marks_wid[i])
+            pi.wave_chain(wave)
 
-        for i in spaces_wid:
-            pi.wave_delete(spaces_wid[i])
+            while pi.wave_tx_busy():
+                time.sleep(0.002)
 
-        pi.stop() # Disconnect from Pi.
+            for i in marks_wid:
+                pi.wave_delete(marks_wid[i])
+
+            for i in spaces_wid:
+                pi.wave_delete(spaces_wid[i])
+
+        finally:
+            pi.stop() # Disconnect from Pi.
