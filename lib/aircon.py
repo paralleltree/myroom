@@ -1,9 +1,11 @@
+from functools import reduce
 from .utils import flatten
 from .ir_converter import IRConverter
 
 class DaikinAircon:
     periodic_time = 435
     carrier_freq= 38.0
+    customer_code = [17, 218, 7]
 
     def __init__(self):
         self.irconv = IRConverter(leader_pulse=[8, 4], space_pulse=[1, 1], mark_pulse=[1, 3])
@@ -16,11 +18,13 @@ class DaikinAircon:
         return flatten([self.bool(i, 4 if index in [2, 3] else 8) for index, i in enumerate(seq)])
 
     def pack(self, work=True, mode='auto', temp=0, speed=-1, swing=True):
-        payload = self.frame(self.code(work, mode, temp, speed, swing))
-        return self.irconv.encode_frame(payload, self.periodic_time)
+        first = self.customer_code + [2, 0, 197, 0, 64, 23]
+        second = self.customer_code + [2, 0, 66, 0, 0, 84]
+        payload = self.code(work, mode, temp, speed, swing)
+        encoded = [self.irconv.encode_frame(self.frame(f), self.periodic_time) for f in [first, second, payload]]
+        return reduce(lambda x, y: x + [35000] + y, encoded)
 
     def code(self, work=True, mode='auto', temp=0, speed=-1, swing=True):
-        customer_code = [17, 218, 7]
         data = [0] * 17
         data[0] = 2
         data[3] = 9 if work else 8
@@ -59,6 +63,6 @@ class DaikinAircon:
             if work:
                 raise ValueError('invalid mode')
 
-        checksum = sum(customer_code[0:2]) + (((data[0] << 4) | (customer_code[2])) & 0xff) + sum(data[1:-2])
+        checksum = sum(self.customer_code[0:2]) + (((data[0] << 4) | (self.customer_code[2])) & 0xff) + sum(data[1:-2])
         data[-1] = checksum & 0xff
-        return customer_code + data
+        return self.customer_code + data
